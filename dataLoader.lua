@@ -36,12 +36,12 @@ local initcheck = argcheck{
 
 	{name="sampleSize",
 	 type="table",
-	 help="WxHxC"},
+	 help="CxWxH"},
 
 	{name="sampleImageNum",
 	 type="number",
 	 help="Number of images used per sample quantity",
-	 default="10"},
+	 default="8"},
 
 	{name="samplingMode",
 	 type="string",
@@ -55,7 +55,7 @@ local initcheck = argcheck{
 
 	{name="loadSize",
 	 type="table",
-	 help="a size to load the images, WxHxC",
+	 help="a size to load the images, CxWxH",
 	 opt=true},
 
 	{name="sampleHookTrain",
@@ -151,17 +151,22 @@ local function tableToOutput(self, degTable, gtTable, count)
 	local deg, gt
 	assert(degTable[1]:dim()==3)
 	assert(gtTable[1]:dim()==3)
-	deg = torch.Tensor(count, self.sampleSize[1],self.sampleSize[2],self.sampleSize[3])
-	gt = torch.Tensor(count, self.sampleSize[1],self.sampleSize[2],self.sampleSize[3])
+	deg = torch.Tensor(count, self.sampleSize[1],self.sampleSize[2], self.sampleSize[3])
+	gt = torch.Tensor(count, self.sampleSize[1],self.sampleSize[2], self.sampleSize[3])
 	for i=1,count do
 		deg[i]:copy(degTable[i])
-		gt[i]:copty(gtTable[i])
+		gt[i]:copy(gtTable[i])
 	end
 	return deg, gt
 end
 
-function dataset:sample(quantity)
-	assert(quantity)
+function dataset:sample(quantity, sopt)
+	if type(sopt) == 'number' then
+		sf = sopt
+	end
+	print(self.paths)
+	assert(quantity > tonumber(self.sampleImageNum))
+	assert(quantity % tonumber(self.sampleImageNum) == 0)
 	local quantityPerImage = math.ceil(quantity / self.sampleImageNum)
 	local degTable = {}
 	local gtTable = {}
@@ -169,16 +174,10 @@ function dataset:sample(quantity)
 	for i=1,self.sampleImageNum do
 		local index = math.ceil(torch.uniform() * self.numImages)
 		local imgpath = ffi.string(torch.data(self.imagePath[index]))
-		local d, g = self:sampleHookTrain(quantityPerImage,imgpath)
-		table.insert(degTable, d)
-		table.insert(gtTable, g)
-		count = count + 1
+		self:sampleHookTrain(imgpath, sf, quantityPerImage, degTable, gtTable)
 	end
-	local deg, gt = tableToOutput(self, degTable, gtTable, count)
+	local deg, gt = tableToOutput(self, degTable, gtTable, quantity)
 	return deg, gt
 end
 
 return dataset
-
-
-
