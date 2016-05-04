@@ -44,7 +44,7 @@ function data.new(nThread, dataset_route, opt_)
 	self.threads:synchronize()
 	self._size = nSamples
 
-	for i = 1,n do
+	for i = 1,nThread do
 		self.threads:addjob(self._sampleFromThreads, self._pushResult)
 	end
 

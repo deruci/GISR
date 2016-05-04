@@ -98,7 +98,7 @@ else
 		sampleSize = {1, sampleSize[2], sampleSize[2]},
 		verbose = true
 	}
-	torch.save(trainCache, trainLoader)
+	torch.save(trainCache, loader)
 	print('saved metadata cache at', trainCache)
 	loader.sampleHookTrain = trainHook
 	loader.sampleHookTest = testHook
