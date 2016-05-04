@@ -90,6 +90,7 @@ function dataset:__init(...)
 
 	for k,path in ipairs(self.paths) do
 		local dirs = dir.getdirectories(path)
+		table.insert(dataPaths, path)
 		for k,dirpath in ipairs(dirs) do
 			table.insert(dataPaths, dirpath)
 		end
@@ -169,13 +170,25 @@ function dataset:sample(quantity, sopt)
 	local quantityPerImage = math.ceil(quantity / self.sampleImageNum)
 	local degTable = {}
 	local gtTable = {}
-	local count = 0
 	for i=1,self.sampleImageNum do
 		local index = math.ceil(torch.uniform() * self.numImages)
 		local imgpath = ffi.string(torch.data(self.imagePath[index]))
 		self:sampleHookTrain(imgpath, sf, quantityPerImage, degTable, gtTable)
 	end
 	local deg, gt = tableToOutput(self, degTable, gtTable, quantity)
+	return deg, gt
+end
+
+function dataset:get(index, sopt, ifColor)
+	local ifColor = ifColor or false
+	if type(sopt) == 'number' then
+		sf = sopt
+	end
+	--print(self.paths)
+	local degTable = {}
+	local gtTable = {}
+	local imgpath = ffi.string(torch.data(self.imagePath[index]))
+	local deg, gt = self:sampleHookTest(imgpath, sf, ifColor)
 	return deg, gt
 end
 

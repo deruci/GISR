@@ -1,17 +1,17 @@
---[[taskmaster to utilizer dataLoader, containing how to I/O files]]--
+--[[taskmaster to utilize dataLoader, containing how to I/O files]]--
 
 require 'image'
 paths.dofile('dataLoader.lua')
 
 --check if there is opt.data
-opt.data = os.getenv('DATA_ROOT') or 'data/training'
-if not paths.dirp(opt.data) then
-	error('Cannot find directory : ', opt.data)
+--opt.data = os.getenv('DATA_ROOT') or 'data/training'
+if not paths.dirp(opt.dataset) then
+	error('Cannot find directory : ', opt.dataset)
 end
 
 --keep cache file of meta-training data.
 local cache = "cache"
-local cache_prefix = opt.data:gsub('/','_')
+local cache_prefix = opt.dataset:gsub('/','_')
 os.execute('mkdir -p cache')
 local trainCache = paths.concat(cache, cache_prefix .. '_trainCache.t7')
 
@@ -19,6 +19,11 @@ local sampleSize = {1, opt.fineSize} --would be #layers*2 + 1
 
 local function loadImage(path)
 	local input = image.rgb2yuv(image.load(path, 3, 'float'))[{{1},{},{}}]
+	return input
+end
+
+local function loadColorImage(path)
+	local input = image.rgb2yuv(image.load(path, 3, 'float'))
 	return input
 end
 
@@ -33,7 +38,7 @@ end
 local trainHook = function(self, path, sf, quantityPerImage, degTable, gtTable)
 	collectgarbage()
 	local im = loadImage(path) --Y channel only, return 1*H*W size single-channel image.
-	-- do random filp / rotate
+	-- do random filp / rotate (not implemented yet)
 
 	local imhigh = modcrop(im, sf)
 	local imlow = image.scale(imhigh, imhigh:size(3)/2, imhigh:size(2)/2, 'bicubic')
@@ -61,20 +66,41 @@ local trainHook = function(self, path, sf, quantityPerImage, degTable, gtTable)
 	end
 end
 
+local testHook = function(self, path, sf, ifColor)
+	collectgarbage()
+	local im
+	if ifColor == 1 then
+		im = loadColorImage(path)
+	else
+		im = loadImage(path)
+	end
+
+	local imhigh = modcrop(im, sf)
+	local imlow = image.scale(imhigh, imhigh:size(3)/2, imhigh:size(2)/2, 'bicubic')
+	imlow = image.scale(imlow, imhigh:size(3), imhigh:size(2), 'bicubic')
+	imlow:clamp(16.0/255, 235.0/255)
+
+	assert(imhigh:size(2)==imlow:size(2))
+	assert(imhigh:size(3)==imlow:size(3))
+	return imlow, imhigh
+end
+
 if paths.filep(trainCache) then
-	print('Loading train metadata from cache')
-	trainLoader = torch.load(trainCache)
-	trainLoader.sampleHookTrain = trainHook
-	trainLoader.sampleSize = {1, sampleSize[2], sampleSize[2]}
+	print('Loading metadata from cache')
+	loader = torch.load(trainCache)
+	loader.sampleHookTrain = trainHook
+	loader.sampleHookTest = testHook
+	loader.sampleSize = {1, sampleSize[2], sampleSize[2]}
 else
 	print('Creating train metadata')
-	trainLoader = dataLoader{
-		paths = {opt.data},
+	loader = dataLoader{
+		paths = {opt.dataset},
 		sampleSize = {1, sampleSize[2], sampleSize[2]},
 		verbose = true
 	}
 	torch.save(trainCache, trainLoader)
 	print('saved metadata cache at', trainCache)
-	trainLoader.sampleHookTrain = trainHook
+	loader.sampleHookTrain = trainHook
+	loader.sampleHookTest = testHook
 end
 collectgarbage()
