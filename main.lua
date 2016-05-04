@@ -4,10 +4,11 @@ require 'optim'
 
 util = paths.dofile('util.lua')
 createModel = paths.dofile('model.lua') --now model always :cuda()
-DataLoader = paths.dofile('taskMultiThread.lua')
+trainLoader = paths.dofile('taskTrain.lua')
+testLoader = paths.dofile('taskTest.lua')
 
 opt = {
-	dataset = 'data/training',
+	dataset = 'data/training/SR91',
 	depth = 15,
 	batchSize = 64,
 	loadSize = 35,
@@ -17,7 +18,7 @@ opt = {
 	lr = 0.00001,
 	momentum = 0.9,
 	nChannel = 64,
-	display = 0,
+	display = 1,
 	display_id = 10,
 	gpu = 1,
 	sopt = 2,
@@ -36,8 +37,9 @@ torch.setnumthreads(1)
 torch.setdefaulttensortype('torch.FloatTensor')
 
 local model, criterion = createModel(opt)
-local data = DataLoader.new(opt.nThreads, opt.dataset, opt)
-print("Dataset: " .. opt.dataset, " Size: ", data:size())
+local trainData = trainLoader.new(opt.nThreads, opt.dataset, opt)
+local testData = testLoader.new(opt.dataset, opt)
+print("Dataset: " .. opt.dataset, " Size: ", trainData:size())
 
 optimState = {
 	learningRate = opt.lr,
@@ -65,7 +67,7 @@ if opt.display then disp = require 'display' end
 local fx = function(x)
 	gradParameters:zero()
 
-	local lowBatch, highBatch = data:getBatch()
+	local lowBatch, highBatch = trainData:getBatch()
 	input:copy(lowBatch); label:copy(highBatch)
 
 	local output = model:forward(input)
