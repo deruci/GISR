@@ -2,7 +2,6 @@
 
 require 'torch'
 torch.setdefaulttensortype('torch.FloatTensor')
-
 require 'sys'
 require 'xlua'
 

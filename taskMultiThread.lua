@@ -1,6 +1,6 @@
 --[[Multithread caller that calls taskmaster]]--
 
-local Thread = require 'threads'
+local Threads = require 'threads'
 Threads.serialization('threads.sharedserialize')
 
 local data = {}
