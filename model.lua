@@ -12,7 +12,7 @@ local function createModel(opt)
 
 	local function bottleneck(nInputPlane, nOutputPlane, stride)
 
-		local nBottleneckPlane = nOutputPlane / 4
+		local nBottleneckPlane = nOutputPlane 
 		
 		if nInputPlane == nOutputPlane then
 			local convs = nn.Sequential()
@@ -71,8 +71,13 @@ local function createModel(opt)
 
 	local model = nn.Sequential()
 	model:add(Convolution(1,nChannel,3,3,1,1,1,1))
+	model:add(ReLU(true))
 	model:add(layer(bottleneck,nChannel,nChannel,depth,1))
-	model:add(Convolution(nChannel,1,3,3,1,1,1,1))
+	model:add(Convolution(nChannel,nChannel/4,3,3,1,1,1,1))
+	model:add(ReLU(true))
+	model:add(Convolution(nChannel/4,1,3,3,1,1,1,1))
+
+
 
 	local function ConvInit(name)
 		for k,v in pairs(model:findModules(name)) do

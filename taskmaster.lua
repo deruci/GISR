@@ -41,13 +41,17 @@ local trainHook = function(self, path, sf, quantityPerImage, degTable, gtTable)
 	-- do random filp / rotate (not implemented yet)
 
 	local imhigh = modcrop(im, sf)
+	--print('c',imhigh:mean())
 	local imlow = image.scale(imhigh, imhigh:size(3)/2, imhigh:size(2)/2, 'bicubic')
 	imlow = image.scale(imlow, imhigh:size(3), imhigh:size(2), 'bicubic')
 	imlow:clamp(16.0/255, 235.0/255)
 	imhigh = imhigh - imlow
+
+	--print('a',imhigh:max(),imhigh:min())
+	--print('ab',imlow:mean())
 	assert(imhigh:size(2)==imlow:size(2))
 	assert(imhigh:size(3)==imlow:size(3))
-
+	
 	local iW = imhigh:size(3)
 	local iH = imhigh:size(2)
 	--do random crop
