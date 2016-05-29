@@ -57,9 +57,9 @@ local trainHook = function(self, imgPath, sf, quantityPerImage, lrTable, gtTable
 	end
 
 	local imhigh = modcrop(im, sf)
-	local imlow = image.scale(imhigh, imhigh:size(3)/2, imhigh:size(2)/2, 'bicubic')
-	imlow = image.scale(imlow, imhigh:size(3), imhigh:size(2), 'bicubic')
-	imlow:clamp(16.0/255, 235.0/255)
+	local imlow = image.scale(imhigh, '*' .. 1/sf, 'bicubic')
+	imlow = image.scale(imlow, '*' .. sf, 'bicubic')
+	--imlow:clamp(16.0/255, 235.0/255)
 	imhigh = imhigh - imlow
 	
 	local iW = imhigh:size(3)
@@ -90,9 +90,9 @@ local testHook = function(self, path, sf, ifColor)
 	end
 
 	local imhigh = modcrop(im, sf)
-	local imlow = image.scale(imhigh, imhigh:size(3)/2, imhigh:size(2)/2, 'bicubic')
-	imlow = image.scale(imlow, imhigh:size(3), imhigh:size(2), 'bicubic')
-	imlow:clamp(16.0/255, 235.0/255)
+	local imlow = image.scale(imhigh, '*' .. 1/sf, 'bicubic')
+	imlow = image.scale(imlow, '*' .. sf, 'bicubic')
+	--imlow:clamp(16.0/255, 235.0/255)
 
 	assert(imhigh:size(2)==imlow:size(2))
 	assert(imhigh:size(3)==imlow:size(3))
