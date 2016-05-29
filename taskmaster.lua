@@ -4,14 +4,14 @@ require 'image'
 paths.dofile('dataLoader.lua')
 
 --check if there is opt.data
---opt.data = os.getenv('DATA_ROOT') or 'data/training'
+opt.data = os.getenv('DATA_ROOT') or opt.dataset
 if not paths.dirp(opt.dataset) then
 	error('Cannot find directory : ', opt.dataset)
 end
 
 --keep cache file of meta-training data.
 local cache = "cache"
-local cache_prefix = opt.dataset:gsub('/','_')
+local cache_prefix = opt.data:gsub('/','_')
 os.execute('mkdir -p cache')
 local trainCache = paths.concat(cache, cache_prefix .. '_trainCache.t7')
 
@@ -23,7 +23,7 @@ local function loadImage(path)
 end
 
 local function loadColorImage(path)
-	local input = image.rgb2yuv(image.load(path, 3, 'float'))
+	local input = image.load(path, 3, 'float')
 	return input
 end
 
@@ -35,22 +35,32 @@ local function modcrop(im, sf)
 	return im[{{},{1,sz_h},{1,sz_w}}]
 end
 
-local trainHook = function(self, path, sf, quantityPerImage, degTable, gtTable)
+local trainHook = function(self, imgPath, sf, quantityPerImage, lrTable, gtTable)
 	collectgarbage()
-	local im = loadImage(path) --Y channel only, return 1*H*W size single-channel image.
+	local im = loadImage(imgPath) --Y channel only, return 1*H*W size single-channel image.
 	-- do random filp / rotate (not implemented yet)
+	local mod = math.ceil(torch.uniform() * 7)
+	if mod == 1 then
+		im = image.hflip(im)
+	elseif mod == 2 then
+		im = image.vflip(im)
+	elseif mod == 3 then
+		im = image.hflip(image.vflip(im))
+	elseif mod == 4 then
+		im = image.rotate(im,math.pi/2)
+	elseif mod == 5 then
+		im = image.rotate(im,math.pi)
+	elseif mod == 6 then
+		im = image.rotate(im,-math.pi/2)
+	else
+		im = im
+	end
 
 	local imhigh = modcrop(im, sf)
-	--print('c',imhigh:mean())
 	local imlow = image.scale(imhigh, imhigh:size(3)/2, imhigh:size(2)/2, 'bicubic')
 	imlow = image.scale(imlow, imhigh:size(3), imhigh:size(2), 'bicubic')
 	imlow:clamp(16.0/255, 235.0/255)
 	imhigh = imhigh - imlow
-
-	--print('a',imhigh:max(),imhigh:min())
-	--print('ab',imlow:mean())
-	assert(imhigh:size(2)==imlow:size(2))
-	assert(imhigh:size(3)==imlow:size(3))
 	
 	local iW = imhigh:size(3)
 	local iH = imhigh:size(2)
@@ -65,7 +75,7 @@ local trainHook = function(self, path, sf, quantityPerImage, degTable, gtTable)
 		assert(imsub:size(2)-oH == 0)
 		assert(imsub:size(3)-oW == 0)
 		--return imsublow, imsub
-		table.insert(degTable, imsublow)
+		table.insert(lrTable, imsublow)
 		table.insert(gtTable, imsub)
 	end
 end
@@ -98,7 +108,7 @@ if paths.filep(trainCache) then
 else
 	print('Creating train metadata')
 	loader = dataLoader{
-		paths = {opt.dataset},
+		dirpath = {opt.dataset},
 		sampleSize = {1, sampleSize[2], sampleSize[2]},
 		verbose = true
 	}

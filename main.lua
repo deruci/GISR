@@ -3,19 +3,20 @@ require 'nn'
 require 'optim'
 
 eval = paths.dofile('eval.lua')
-createModel = paths.dofile('model.lua') --now model always :cuda()
+createModel = paths.dofile('model_vdsr.lua') 
 trainLoader = paths.dofile('taskTrain.lua')
 testLoader = paths.dofile('taskTest.lua')
 
 opt = {
-	dataset = 'data/training/SR91',
-	depth = 15,
+	dataset = 'data/training',
+	depth = 20,
 	batchSize = 64,
-	loadSize = 35,
-	fineSize = 35,
+	loadSize = 41,
+	fineSize = 41,
 	nThreads = 4,
-	nIter = 100000,
-	lr = 0.00001,
+	nIter = 80000,
+	lr = 0.1,
+	clip = 0.01,
 	momentum = 0.9,
 	nChannel = 64,
 	display = 1,
@@ -25,7 +26,7 @@ opt = {
 	color = 0,
 	weightDecay = 0.0001
 }
-opt.name = string.format('d_sr_exp_sf_%d',opt.sopt)
+opt.name = string.format('VDSR_sgd_exp_sf_%d',opt.sopt)
 
 for k,v in pairs(opt) do opt[k] = tonumber(os.getenv(k)) or os.getenv(k) or opt[k] end
 print(opt)
@@ -41,15 +42,13 @@ local model, criterion = createModel(opt)
 local trainData = trainLoader.new(opt.nThreads, opt.dataset, opt)
 opt.dataset = 'data/test/Set5'
 local testData = testLoader.new(opt.dataset, opt)
-opt.dataset = 'data/training/SR91'
+opt.dataset = 'data/training'
 print("Dataset: " .. opt.dataset, " Size: ", trainData:size())
 
 optimState = {
 	learningRate = opt.lr,
 	weightDecay = opt.weightDecay,
-	momentum = opt.momentum,
-	nesterov = true,
-	dampening = 0
+	momentum = opt.momentum
 }
 
 local input = torch.Tensor(opt.batchSize, 1, opt.fineSize, opt.fineSize)
@@ -79,11 +78,13 @@ local fx = function(x)
 	local dfdo = criterion:backward(output, label)
 	model:backward(input, dfdo)
 
+	gradParameters:clamp(-opt.clip/opt.lr, opt.clip/opt.lr)
+
 	return loss, gradParameters
 end
 
 for iterNum = 1, opt.nIter do
-	if iterNum == 50000 or iterNum == 70000 then
+	if iterNum == 20000 or iterNum == 40000 or iterNum == 60000 then
 		opt.lr = opt.lr * 0.1
 	end
 
@@ -94,22 +95,19 @@ for iterNum = 1, opt.nIter do
 			low = low:cuda()
 		end
 		model:evaluate()
-		local resPred = model:forward(low:resize(1,1,low:size(2),low:size(2)))
+		local resPred = model:forward(low:resize(1,1,low:size(2),low:size(3)))
 		model:training()
 		resPred = resPred[1]; low = low[1];
 		local pred = resPred + low
 		--print(pred:max(), resPred:max(), low:max())
-
-		pred:apply(function(x) if x < 0 then return 0 end end)
-		pred:apply(function(x) if x > 1 then return 1 end end)
-
+		--pred:apply(function(x) if x < 0 then return 0 end end)
+		--pred:apply(function(x) if x > 1 then return 1 end end)
 		disp.image(low, {win=opt.display_id, titie='LR image'})
 		disp.image(resPred, {win=opt.display_id + 1, title ='pred residual image'})
 		disp.image(pred, {win=opt.display_id + 2, title = 'SR image'})
 		disp.image(high, {win=opt.display_id + 3, title = 'GT image'})
-		
 		pred = pred:type('torch.FloatTensor')
-		local psnr = eval.psnr(eval.shave(pred,opt.sopt), eval.shave(high,opt.sopt))
+		local psnr =  eval.psnr(eval.shave(pred,opt.sopt), eval.shave(high,opt.sopt))
 		table.insert(samplePSNR, {iterNum, psnr})
 		disp.plot(samplePSNR, {win=opt.display_id + 4, title='sample psnr', labels = {'iter', 'psnr'}})
 

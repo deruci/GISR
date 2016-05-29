@@ -5,9 +5,9 @@ torch.setdefaulttensortype('torch.FloatTensor')
 require 'sys'
 require 'xlua'
 
-local ffi = require 'ffi'
+--local ffi = require 'ffi'
 local class = require('pl.class')
-local dir = require 'pl.dir'
+--local dir = require 'pl.dir'
 local argcheck = require 'argcheck'
 
 local dataset = torch.class('dataLoader')
@@ -19,9 +19,9 @@ local initcheck = argcheck{
 		Function will be added whenever needed.
     ]],
 	
-	{check=function(paths)
+	{check=function(dirpath)
 		local out = true;
-		for k,v in ipairs(paths) do
+		for k,v in ipairs(dirpath) do
 			if type(v) ~= 'string' then
 				print('paths can only be of string input');
 				out = false
@@ -29,7 +29,7 @@ local initcheck = argcheck{
 		end
 		return out
 	end,
-	name="paths",
+	name="dirpath",
 	type="table",
 	help="Multiple paths of directories with images"},
 
@@ -79,104 +79,80 @@ function dataset:__init(...)
 	if not self.sampleHookTrain then self.sampleHookTrain = self.defaultSampleHook end
 	if not self.sampleHookTest then self.sampleHookTest = self.defaultSampleHook end
 	--seems to be not defined..?
-
-	--define command-line tools
-	local wc = 'wc'
-	local cut = 'cut'
-	local find = 'find'
-	
+		
 	--enlist all paths into datapaths table
-	local dataPaths = {}
+	local dataPath = {}
 
-	for k,path in ipairs(self.paths) do
-		local dirs = dir.getdirectories(path)
-		table.insert(dataPaths, path)
-		for k,dirpath in ipairs(dirs) do
-			table.insert(dataPaths, dirpath)
+	for i=1,#self.dirpath do
+		table.insert(dataPath, paths.concat(self.dirpath[i]))
+		for p in paths.iterdirs(self.dirpath[i]) do
+			print(self.dirpath[i])
+			table.insert(dataPath, paths.concat(self.dirpath[i],p))
 		end
 	end
 
+	print(dataPath)
+	
 	--options for find command
 	local extensionList = {'jpg', 'png','JPG','PNG','JPEG', 'ppm', 'PPM', 'bmp', 'BMP'}
-	local findOptions = ' -name "*.' .. extensionList[1] .. '"'
-	for i=2,#extensionList do
-		findOptions = findOptions .. ' -o -iname "*.' .. extensionList[i] .. '"'
-	end
 
 	--find the image path names
-	self.imagePath = torch.CharTensor()
+	self.imagePath = {}
 
-	local findFiles = os.tmpname()
-	local tmpfile = os.tmpname()
-	local tmphandle = assert(io.open(tmpfile, 'w'))
-
-	--iterate over all dataPaths
-	for i, path in ipairs(dataPaths) do
-		local command = find .. ' "' .. path .. '" ' .. findOptions .. ' >>"' .. findFiles .. '" \n'
-		tmphandle:write(command)
+	--iterate over all paths
+	for i=1,#dataPath do
+		for f in paths.files(dataPath[i],"png") do
+			table.insert(self.imagePath, paths.concat(dataPath[i],f))
+		end
 	end
-	io.close(tmphandle)
-	os.execute('bash ' .. tmpfile)
-	--os.execute('rm -f ' .. tmpfile)
 
 	print('load the large concatenated list of sample paths to self.imagePath')
-	local maxPathLength = tonumber(sys.fexecute(wc .. " -L '" .. findFiles .. "' |" .. cut .. " -f1 -d' '")) + 1
-	local length = tonumber(sys.fexecute(wc .. " -l '" .. findFiles .. "' |" .. cut .. " -f1 -d' '"))
-	assert(length > 0, "Cannot find any files")
-	assert(maxPathLength > 0, "Please check if the given paths are valid")
-	self.imagePath:resize(length, maxPathLength):fill(0)
-	local s_data = self.imagePath:data() --LuaJUT FFI access
-	local count = 0												 
-	for line in io.lines(findFiles) do
-		ffi.copy(s_data, line)
-		s_data = s_data + maxPathLength
-		if self.verbose and count % 5000 == 0 then
-			xlua.progress(count, length)
-		end
-		count = count + 1
-	end
-	
-	self.numImages = self.imagePath:size(1)
+	--assert(length > 0, "Cannot find any files")
+	--assert(maxPathLength > 0, "Please check if the given paths are valid")
+	--self.imagePath:resize(gtLength, maxGtPathLength):fill(0)												   
+	self.numImages = #self.imagePath
 	if self.verbose then print(self.numImages .. ' images found.') end
-	
-	--clean up temporary file
-	os.execute('rm -f "' ..  findFiles .. '"')
 end
 
 function dataset:size()
 	return self.numImages
 end
 
-local function tableToOutput(self, degTable, gtTable, count)
-	local deg, gt
-	assert(degTable[1]:dim()==3)
+function dataset:show(i)
+	--print(self.gtImagePath[i])
+	--print(self.lrImagePath[i])
+	return self.imagePath[i]
+end
+
+local function tableToOutput(self, lrTable, gtTable, count)
+	local lr, gt
+	assert(lrTable[1]:dim()==3)
 	assert(gtTable[1]:dim()==3)
-	deg = torch.Tensor(count, self.sampleSize[1],self.sampleSize[2], self.sampleSize[3])
+	lr = torch.Tensor(count, self.sampleSize[1],self.sampleSize[2], self.sampleSize[3])
 	gt = torch.Tensor(count, self.sampleSize[1],self.sampleSize[2], self.sampleSize[3])
 	for i=1,count do
-		deg[i]:copy(degTable[i])
+		lr[i]:copy(lrTable[i])
 		gt[i]:copy(gtTable[i])
 	end
-	return deg, gt
+	return lr, gt
 end
 
 function dataset:sample(quantity, sopt)
 	if type(sopt) == 'number' then
 		sf = sopt
 	end
-	print(self.paths)
 	assert(quantity > tonumber(self.sampleImageNum))
 	assert(quantity % tonumber(self.sampleImageNum) == 0)
 	local quantityPerImage = math.ceil(quantity / self.sampleImageNum)
-	local degTable = {}
+	local lrTable = {}
 	local gtTable = {}
 	for i=1,self.sampleImageNum do
 		local index = math.ceil(torch.uniform() * self.numImages)
-		local imgpath = ffi.string(torch.data(self.imagePath[index]))
-		self:sampleHookTrain(imgpath, sf, quantityPerImage, degTable, gtTable)
+		local imgPath = self.imagePath[index]
+		self:sampleHookTrain(imgPath, sf, quantityPerImage, lrTable, gtTable)
 	end
-	local deg, gt = tableToOutput(self, degTable, gtTable, quantity)
-	return deg, gt
+	local lr, gt = tableToOutput(self, lrTable, gtTable, quantity)
+	return lr, gt
 end
 
 function dataset:get(index, sopt, ifColor)
@@ -185,11 +161,11 @@ function dataset:get(index, sopt, ifColor)
 		sf = sopt
 	end
 	--print(self.paths)
-	local degTable = {}
+	local lrTable = {}
 	local gtTable = {}
-	local imgpath = ffi.string(torch.data(self.imagePath[index]))
-	local deg, gt = self:sampleHookTest(imgpath, sf, ifColor)
-	return deg, gt
+	local imgPath = self.imagePath[index]
+	local lr, gt = self:sampleHookTest(imgPath, sf, ifColor)
+	return lr, gt
 end
 
 return dataset
